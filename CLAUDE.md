@@ -71,8 +71,9 @@ Compound, Dictionary, Template, GlobalSearch, User, Role).
 
 ## Common commands
 
-Backend (from `backend/`, requires Java 21+; Gradle toolchain targets a newer
-JDK — check `buildSrc/src/main/kotlin/eln-conventions.gradle.kts`):
+Backend (from `backend/`). **The build requires JDK 25** — the convention plugin
+(`buildSrc/src/main/kotlin/eln-conventions.gradle.kts`) pins Java 25 source/target,
+so an older JDK fails with `invalid source release: 25`.
 
 ```bash
 ./gradlew build                          # build + unit tests
@@ -80,6 +81,28 @@ JDK — check `buildSrc/src/main/kotlin/eln-conventions.gradle.kts`):
 ./gradlew :eln:eln-service:quarkusDev    # dev mode with live reload
 ./gradlew test                           # all unit tests
 ```
+
+### Getting JDK 25 in a cloud / sandbox session
+
+Direct downloads (e.g. Adoptium) are usually blocked by the network policy, but the
+Ubuntu apt mirrors are reachable and carry OpenJDK 25:
+
+```bash
+sudo apt-get update                         # the package index is often stale — refresh first
+sudo apt-get install -y openjdk-25-jdk-headless   # installs to /usr/lib/jvm/java-25-openjdk-amd64
+```
+
+Then run Gradle against it:
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
+./gradlew :eln:eln-core:compileJava -Dorg.gradle.java.home="$JAVA_HOME" --no-configuration-cache
+```
+
+Pass `--no-configuration-cache`: the Quarkus extension tasks aren't configuration-cache
+compatible, and a discarded cache otherwise forces a from-scratch recompile of
+`common:eln-quarkus-extension` (which then fails on any non-25 JDK). The first build also
+downloads the full dependency tree and can take a couple of minutes.
 
 Frontend (from `indigo-frontend/`):
 
@@ -120,6 +143,20 @@ Full local stack (from repo root):
 - **Tests**: backend unit tests sit next to modules (`src/test/java`);
   cross-service tests live in `backend/integrationTests/`. Frontend specs are
   `*.spec.ts` beside the component.
+
+## Known build/test issues
+
+- `:eln:eln-core` test sources don't all compile: `NotebookServiceTest` imports
+  `Paging` / `SortOrder` from `com.epam.indigoeln.eln.model` instead of
+  `com.epam.indigoeln.common.model`. Since Gradle compiles the whole test source set
+  together, this currently blocks `:eln:eln-core:test`. To run a single test class,
+  launch it via the JUnit platform launcher against the compiled classpath.
+
+## In-progress features
+
+- **Assay data registration** (microtitre plate) — see `ASSAY_REGISTRATION.md` for design,
+  status, and verification steps. Flyway schema `V1.0.105__assays.sql`, entities and the
+  dependency-graph + calculation engines under `backend/eln/eln-core/.../assay/`.
 
 ## Legacy 2.x notes (2.x branch only)
 
